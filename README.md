@@ -1,3 +1,59 @@
+## Travel Concierge Agent
+
+This repository now includes a specialized travel concierge agent that builds a
+real itinerary from fresh local listings.
+
+### What it does
+
+Given:
+
+- a city (for example: `Berlin`, `Paris`, `New York`)
+- a start date
+- an end date
+
+the agent finds local:
+
+- festivals
+- gallery openings
+- restaurant pop-ups
+
+and returns a schedule containing:
+
+- specific start times
+- venue names
+- full venue addresses
+- source listing URLs
+
+Only events with explicit start times and physical venue information are
+included.
+
+### Install dependencies
+
+```bash
+python3 -m pip install --user -r requirements.txt
+```
+
+### Run
+
+```bash
+python3 travel_concierge_agent.py \
+  --city "Berlin" \
+  --start-date 2026-04-20 \
+  --end-date 2026-04-30
+```
+
+Optional JSON output:
+
+```bash
+python3 travel_concierge_agent.py \
+  --city "Berlin" \
+  --start-date 2026-04-20 \
+  --end-date 2026-04-30 \
+  --json
+```
+
+---
+
 ## How do I complete this project?
 
 1. Go to the [Javascript Basics course](https://www.udacity.com/course/ud804) and select "View Course Materials."
