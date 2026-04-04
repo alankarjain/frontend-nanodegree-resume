@@ -57,9 +57,9 @@ CATEGORY_SEARCH_TERMS: dict[str, list[str]] = {
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "festival": (
         "festival",
-        "fest",
         "carnival",
         "fair",
+        "night market",
     ),
     "gallery opening": (
         "gallery opening",
@@ -70,14 +70,24 @@ CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
         "exhibition opening",
     ),
     "restaurant pop-up": (
-        "pop up",
-        "popup",
+        "restaurant pop up",
+        "restaurant popup",
+        "food pop up",
+        "food popup",
         "chef dinner",
         "guest chef",
         "restaurant takeover",
         "supper club",
     ),
 }
+
+GENERIC_VENUE_MARKERS = (
+    "location provided after booking",
+    "location shared after booking",
+    "to be announced",
+    "tba",
+    "tbd",
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -152,6 +162,13 @@ def _build_address(address: dict[str, Any]) -> str:
     return ", ".join(part for part in parts if part)
 
 
+def _contains_phrase(text: str, phrase: str) -> bool:
+    if not phrase:
+        return False
+    pattern = r"\b" + r"\s+".join(re.escape(part) for part in phrase.split()) + r"\b"
+    return re.search(pattern, text) is not None
+
+
 def _looks_online(location_name: str, attendance_mode: str) -> bool:
     lower_location = location_name.lower()
     lower_mode = attendance_mode.lower()
@@ -160,6 +177,11 @@ def _looks_online(location_name: str, attendance_mode: str) -> bool:
         or "virtual" in lower_location
         or "onlineeventattendancemode" in lower_mode
     )
+
+
+def _looks_generic_venue(location_name: str) -> bool:
+    lower_location = location_name.lower()
+    return any(marker in lower_location for marker in GENERIC_VENUE_MARKERS)
 
 
 def _parse_event_details(html: str, source_url: str, fallback_category: str) -> Event | None:
@@ -216,9 +238,14 @@ def _parse_event_details(html: str, source_url: str, fallback_category: str) -> 
 
     title = str(event_obj.get("name", "")).strip()
     description = str(event_obj.get("description", "")).strip()
+    if _looks_generic_venue(location_name):
+        return None
+
+    schema_type = str(event_obj.get("@type", ""))
     category = _classify_category(
         title=title,
         description=description,
+        schema_type=schema_type,
         fallback_category=fallback_category,
     )
 
@@ -237,14 +264,54 @@ def _parse_event_details(html: str, source_url: str, fallback_category: str) -> 
     )
 
 
-def _classify_category(title: str, description: str, fallback_category: str) -> str | None:
+def _classify_category(
+    title: str,
+    description: str,
+    schema_type: str,
+    fallback_category: str,
+) -> str | None:
     haystack = f"{title} {description}".lower()
+    schema = schema_type.lower()
+
+    pop_markers = ("pop up", "popup", "takeover")
+    food_markers = ("restaurant", "chef", "dinner", "food", "supper", "kitchen", "menu")
+    gallery_markers = ("gallery", "exhibition", "museum", "vernissage")
+    opening_markers = (
+        "opening",
+        "opening reception",
+        "opening night",
+        "private view",
+        "vernissage",
+        "preview",
+        "exhibition",
+        "finissage",
+    )
+
+    if any(_contains_phrase(haystack, marker) for marker in pop_markers) and any(
+        _contains_phrase(haystack, marker) for marker in food_markers
+    ):
+        return "restaurant pop-up"
+
+    if any(_contains_phrase(haystack, marker) for marker in gallery_markers) and any(
+        _contains_phrase(haystack, marker) for marker in opening_markers
+    ):
+        return "gallery opening"
+
+    if "festival" in schema:
+        return "festival"
+    if "exhibition" in schema and any(
+        _contains_phrase(haystack, marker) for marker in opening_markers
+    ):
+        return "gallery opening"
     for category, keywords in CATEGORY_KEYWORDS.items():
-        if any(keyword in haystack for keyword in keywords):
+        if any(_contains_phrase(haystack, keyword) for keyword in keywords):
             return category
 
-    # Keep a strict fallback only when a query path was category-driven.
-    if fallback_category in CATEGORY_SEARCH_TERMS:
+    # Strict fallback: only trust category-driven queries when the literal
+    # category phrase is present in listing text.
+    if fallback_category in CATEGORY_SEARCH_TERMS and _contains_phrase(
+        haystack, fallback_category
+    ):
         return fallback_category
     return None
 
